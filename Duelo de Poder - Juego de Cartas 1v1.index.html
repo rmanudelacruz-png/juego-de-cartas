@@ -1,0 +1,1982 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Duelo de Poder | Juego de Cartas 1v1</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* Ajuste estricto 100dvh para que todo quepa en pantalla móvil sin scroll */
+        html, body {
+            height: 100dvh;
+            max-height: 100dvh;
+            overflow: hidden;
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at center, #13182b 0%, #070911 100%);
+            color: #f8fafc;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .font-epic {
+            font-family: 'Cinzel', serif;
+        }
+
+        .bg-grid {
+            background-size: 32px 32px;
+            background-image: 
+                linear-gradient(to right, rgba(99, 102, 241, 0.06) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(99, 102, 241, 0.06) 1px, transparent 1px);
+        }
+
+        /* Perspectiva 3D para cartas */
+        .perspective-1000 {
+            perspective: 1000px;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+            transform-style: preserve-3d;
+        }
+
+        .card-flipped {
+            transform: rotateY(180deg);
+        }
+
+        .card-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            border-radius: 0.85rem;
+        }
+
+        .card-back {
+            transform: rotateY(180deg);
+            background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #311042 100%);
+            border: 2px solid #6366f1;
+            box-shadow: inset 0 0 20px rgba(99, 102, 241, 0.45);
+        }
+
+        /* Cartas en mano */
+        .hand-card {
+            transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1), filter 0.2s;
+            cursor: pointer;
+        }
+
+        .hand-card:hover:not(.disabled),
+        .hand-card:active:not(.disabled) {
+            transform: translateY(-6px) scale(1.03);
+            z-index: 20;
+        }
+
+        .hand-card.disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            filter: grayscale(0.6);
+        }
+
+        /* Rarezas */
+        .rarity-comun {
+            border: 2px solid #94a3b8;
+            box-shadow: 0 3px 10px rgba(148, 163, 184, 0.2);
+            background: linear-gradient(160deg, #1e293b 0%, #0f172a 100%);
+        }
+        .rarity-rara {
+            border: 2px solid #38bdf8;
+            box-shadow: 0 3px 14px rgba(56, 189, 248, 0.35);
+            background: linear-gradient(160deg, #0c4a6e 0%, #0f172a 100%);
+        }
+        .rarity-epica {
+            border: 2px solid #c084fc;
+            box-shadow: 0 3px 18px rgba(192, 132, 252, 0.45);
+            background: linear-gradient(160deg, #3b0764 0%, #0f172a 100%);
+        }
+        .rarity-legendaria {
+            border: 2px solid #fbbf24;
+            box-shadow: 0 0 20px rgba(251, 191, 36, 0.55);
+            background: linear-gradient(160deg, #451a03 0%, #1c1917 60%, #451a03 100%);
+        }
+
+        .rarity-legendaria::after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                to bottom right,
+                rgba(255, 255, 255, 0) 0%,
+                rgba(255, 255, 255, 0) 40%,
+                rgba(251, 191, 36, 0.25) 50%,
+                rgba(255, 255, 255, 0) 60%,
+                rgba(255, 255, 255, 0) 100%
+            );
+            transform: rotate(30deg);
+            animation: shine 4s infinite linear;
+            pointer-events: none;
+        }
+
+        @keyframes shine {
+            0% { transform: translateX(-100%) rotate(30deg); }
+            100% { transform: translateX(100%) rotate(30deg); }
+        }
+
+        @keyframes slamIn {
+            0% { transform: scale(1.25) translateY(18px); opacity: 0; }
+            70% { transform: scale(0.96) translateY(0); opacity: 1; }
+            100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+
+        .animate-slam {
+            animation: slamIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-6px); }
+            50% { transform: translateX(6px); }
+            75% { transform: translateX(-4px); }
+        }
+
+        .animate-shake {
+            animation: shake 0.35s ease-in-out;
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 0 12px rgba(34, 197, 94, 0.5); }
+            50% { box-shadow: 0 0 26px rgba(34, 197, 94, 0.95); }
+        }
+
+        .winner-glow {
+            animation: pulseGlow 1.4s infinite;
+            border-color: #22c55e !important;
+        }
+
+        .loser-dim {
+            filter: grayscale(0.75) brightness(0.6);
+            transform: scale(0.94);
+            transition: all 0.35s ease;
+        }
+
+        @keyframes floatCoin {
+            0% { transform: translateY(0) scale(0.8); opacity: 1; }
+            100% { transform: translateY(-28px) scale(1.15); opacity: 0; }
+        }
+
+        .coin-pop {
+            animation: floatCoin 0.9s ease-out forwards;
+            pointer-events: none;
+        }
+
+        @keyframes levelUpPop {
+            0% { transform: scale(0.92); box-shadow: 0 0 0 rgba(52, 211, 153, 0); }
+            50% { transform: scale(1.06); box-shadow: 0 0 24px rgba(52, 211, 153, 0.9); }
+            100% { transform: scale(1); box-shadow: 0 0 0 rgba(52, 211, 153, 0); }
+        }
+
+        .animate-levelup {
+            animation: levelUpPop 0.55s ease-out;
+        }
+
+        /* Scroll interno limpio solo dentro de modales */
+        .modal-scroll::-webkit-scrollbar {
+            width: 5px;
+        }
+        .modal-scroll::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.5);
+            border-radius: 9999px;
+        }
+    </style>
+</head>
+<body class="bg-grid flex flex-col justify-between p-1.5 sm:p-3">
+
+    <!-- 1. MARCADOR SUPERIOR COMPACTO CON TROFEOS, ARENA, MONEDAS, TIENDA Y MAZO -->
+    <header class="w-full max-w-6xl mx-auto flex items-center justify-between gap-1 bg-slate-900/90 border border-indigo-500/30 px-2 py-1.5 sm:px-4 sm:py-2 rounded-2xl shadow-lg shrink-0">
+        <!-- Jugador + Monedas + Vidas -->
+        <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+            <div class="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-sm sm:text-lg shadow-inner shrink-0">
+                🧙‍♂️
+            </div>
+            <div class="min-w-0">
+                <div class="flex items-center gap-1">
+                    <span class="font-bold text-[11px] sm:text-sm text-cyan-300">TÚ</span>
+                    <div id="coins-pill" class="relative flex items-center gap-0.5 bg-amber-950/90 border border-amber-400/50 px-1.5 py-0.2 rounded-full text-[10px] sm:text-xs font-extrabold text-amber-300">
+                        <span>💰</span>
+                        <span id="coin-balance">150</span>
+                        <span id="coin-delta-container" class="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap z-30"></span>
+                    </div>
+                </div>
+                <div id="player-hearts" class="flex items-center gap-0.5 text-[11px] sm:text-base leading-none mt-0.5"></div>
+            </div>
+        </div>
+
+        <!-- Centro: Emblema de Arena + Barra Trofeos + Botones Tienda/Mazo/Arenas -->
+        <div class="flex flex-col items-center shrink-0">
+            <!-- Barra de Arena y Trofeos clickable -->
+            <button onclick="openArenasModal()" title="Ver Arenas y Recompensas" class="flex items-center gap-1.5 bg-slate-950/90 hover:bg-slate-800 border border-amber-400/40 px-2 py-0.5 rounded-full mb-1 transition active:scale-95">
+                <span id="header-arena-icon" class="text-xs sm:text-sm">🌲</span>
+                <span id="header-arena-name" class="text-[10px] sm:text-xs font-extrabold text-emerald-300">Arena 1</span>
+                <div class="flex items-center gap-1 bg-amber-500/15 px-1.5 rounded-full text-[10px] sm:text-xs font-black text-amber-300">
+                    <span>🏆</span>
+                    <span id="trophy-balance">0</span>
+                </div>
+                <div class="hidden xs:block w-12 sm:w-20 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="header-trophy-bar" class="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-500" style="width: 0%"></div>
+                </div>
+            </button>
+
+            <!-- Accesos rápidos: Tienda, Mazo/Mejoras, Cofre y Sonido -->
+            <div class="flex items-center gap-1">
+                <button onclick="openShopModal('shop')" class="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-[10px] sm:text-xs shadow active:scale-95 transition">
+                    <span>🛒</span><span>Tienda</span>
+                </button>
+                <button onclick="openShopModal('collection')" class="relative flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] sm:text-xs border border-indigo-400/50 shadow active:scale-95 transition">
+                    <span>🃏</span><span>Mazo</span>
+                    <span id="upgradable-dot" class="hidden w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                </button>
+                <button id="free-chest-btn" onclick="claimFreeChest()" class="px-1.5 py-0.5 rounded-full bg-emerald-600/90 hover:bg-emerald-500 border border-emerald-300/50 text-[9px] sm:text-[11px] font-extrabold text-white transition">
+                    🎁 +40💰
+                </button>
+                <button id="sound-toggle" class="px-1.5 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-600/50 text-[10px]" title="Sonido">
+                    <span id="sound-icon">🔊</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- IA Rival -->
+        <div class="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            <div class="text-right">
+                <div class="flex items-center justify-end gap-1">
+                    <span id="round-badge" class="text-[9px] sm:text-[11px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-500/40 px-1.5 rounded-full">R1</span>
+                    <span class="font-bold text-[11px] sm:text-sm text-rose-400">RIVAL</span>
+                </div>
+                <div id="ai-hearts" class="flex items-center justify-end gap-0.5 text-[11px] sm:text-base leading-none mt-0.5"></div>
+            </div>
+            <div class="w-7 h-7 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br from-rose-500 to-purple-700 flex items-center justify-center text-sm sm:text-lg shadow-inner">
+                🤖
+            </div>
+        </div>
+    </header>
+
+    <!-- 2. ZONA CENTRAL: ARENA DE BATALLA + GUÍA DE ELEMENTOS SIEMPRE VISIBLE A UN COSTADO -->
+    <main class="flex-1 min-h-0 w-full max-w-6xl mx-auto my-1.5 flex flex-row items-stretch gap-1.5 sm:gap-3">
+        
+        <!-- ARENA DE BATALLA (Con borde dinámico según la Arena actual) -->
+        <section id="battle-arena" class="flex-1 min-w-0 bg-slate-900/65 backdrop-blur-md border-2 border-emerald-500/40 rounded-2xl p-2 sm:p-4 flex flex-col justify-between relative overflow-hidden shadow-xl transition-colors duration-500">
+            
+            <!-- Cartas ocultas rival + Estado del turno -->
+            <div class="flex flex-col items-center gap-1 shrink-0">
+                <div id="ai-hand-backs" class="flex gap-1"></div>
+                <div id="turn-status" class="text-center px-2.5 py-0.5 rounded-full text-[11px] sm:text-sm font-bold bg-indigo-950/90 border border-indigo-500/40 text-indigo-200 truncate max-w-full">
+                    Elige una carta abajo para atacar
+                </div>
+            </div>
+
+            <!-- Enfrentamiento 1v1 en fila horizontal incluso en móviles -->
+            <div class="flex-1 min-h-0 flex flex-row items-center justify-center gap-2 sm:gap-8 my-1">
+                
+                <!-- Slot Jugador -->
+                <div class="flex flex-col items-center h-full max-h-[185px] sm:max-h-[245px] justify-center">
+                    <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-cyan-400 mb-0.5">Tú</span>
+                    <div id="player-arena-slot" class="w-24 h-36 sm:w-40 sm:h-56 rounded-xl border-2 border-dashed border-cyan-500/40 bg-slate-950/50 flex items-center justify-center relative">
+                        <span class="text-slate-500 text-[10px] sm:text-xs text-center px-1.5">Toca tu carta</span>
+                    </div>
+                </div>
+
+                <!-- VS y Bono Elemental -->
+                <div class="flex flex-col items-center justify-center shrink-0">
+                    <div id="vs-badge" class="w-8 h-8 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-amber-500 via-orange-600 to-rose-600 flex items-center justify-center font-epic font-black text-white text-xs sm:text-lg shadow-md border border-amber-300/60">
+                        VS
+                    </div>
+                    <div id="element-bonus-badge" class="mt-1 text-[9px] sm:text-xs font-extrabold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-300 opacity-0 transition-opacity text-center leading-tight">
+                        +12⚡
+                    </div>
+                </div>
+
+                <!-- Slot IA -->
+                <div class="flex flex-col items-center h-full max-h-[185px] sm:max-h-[245px] justify-center">
+                    <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-rose-400 mb-0.5">Rival</span>
+                    <div id="ai-arena-slot" class="w-24 h-36 sm:w-40 sm:h-56 rounded-xl border-2 border-dashed border-rose-500/40 bg-slate-950/50 flex items-center justify-center perspective-1000 relative">
+                        <span class="text-slate-500 text-[10px] sm:text-xs text-center px-1.5">Esperando...</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Mini resumen de última ronda -->
+            <div id="last-round-bar" class="text-center text-[10px] sm:text-xs text-slate-400 truncate shrink-0">
+                Gana partidas para subir de <span class="text-amber-300 font-bold">🏆 Arena</span> y mejorar cartas
+            </div>
+        </section>
+
+        <!-- PANEL LATERAL DERECHO SIEMPRE VISIBLE: QUÉ LE GANA A QUÉ -->
+        <aside id="element-chart-panel" onclick="openElementDetailModal()" title="Toca para ver detalles de ventajas"
+               class="w-[96px] sm:w-52 shrink-0 bg-slate-900/85 hover:bg-slate-900 border border-amber-500/35 rounded-2xl p-1.5 sm:p-3 flex flex-col justify-between shadow-xl cursor-pointer transition active:scale-95">
+            
+            <div>
+                <div class="flex items-center justify-between border-b border-slate-800 pb-1 mb-1.5">
+                    <span class="text-[10px] sm:text-xs font-extrabold uppercase tracking-tight text-amber-300 leading-tight">
+                        ⚔️ Ventajas
+                    </span>
+                    <span class="text-[9px] sm:text-[11px] font-black bg-amber-500/20 text-amber-300 border border-amber-400/40 px-1 rounded">
+                        +12⚡
+                    </span>
+                </div>
+
+                <!-- Ciclo Elemental 1: Fuego -> Tierra -> Agua -> Fuego -->
+                <div class="space-y-1 sm:space-y-1.5">
+                    <div class="text-[9px] sm:text-[11px] font-bold text-slate-400 uppercase">Trío Elemental</div>
+                    
+                    <div class="flex items-center justify-between bg-slate-950/75 border border-orange-500/25 rounded-lg px-1.5 py-1 text-[11px] sm:text-xs font-bold">
+                        <span title="Fuego">🔥</span>
+                        <span class="text-emerald-400 text-[10px]">gana</span>
+                        <span title="Tierra">🌿</span>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-slate-950/75 border border-emerald-500/25 rounded-lg px-1.5 py-1 text-[11px] sm:text-xs font-bold">
+                        <span title="Tierra">🌿</span>
+                        <span class="text-emerald-400 text-[10px]">gana</span>
+                        <span title="Agua">💧</span>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-slate-950/75 border border-sky-500/25 rounded-lg px-1.5 py-1 text-[11px] sm:text-xs font-bold">
+                        <span title="Agua">💧</span>
+                        <span class="text-emerald-400 text-[10px]">gana</span>
+                        <span title="Fuego">🔥</span>
+                    </div>
+                </div>
+
+                <!-- Ciclo 2: Luz <-> Sombra -->
+                <div class="mt-2 pt-1.5 border-t border-slate-800/80 space-y-1">
+                    <div class="text-[9px] sm:text-[11px] font-bold text-slate-400 uppercase">Opuestos</div>
+                    <div class="flex items-center justify-between bg-slate-950/75 border border-purple-500/30 rounded-lg px-1.5 py-1 text-[11px] sm:text-xs font-bold">
+                        <span title="Luz">✨</span>
+                        <span class="text-amber-300 text-[10px]">⇄</span>
+                        <span title="Sombra">🌑</span>
+                    </div>
+                    <p class="hidden sm:block text-[10px] text-slate-400 leading-tight">
+                        Luz y Sombra se potencian mutuamente (+12⚡).
+                    </p>
+                </div>
+            </div>
+
+            <!-- Botón indicador táctil -->
+            <div class="mt-1 pt-1 border-t border-slate-800 text-center">
+                <span class="text-[9px] sm:text-[11px] font-semibold text-indigo-300 underline">
+                    Ver guía 🔍
+                </span>
+            </div>
+        </aside>
+
+    </main>
+
+    <!-- 3. ZONA INFERIOR: MANO DEL JUGADOR (4 CARTAS EN UNA FILA COMPACTA) -->
+    <footer class="w-full max-w-5xl mx-auto shrink-0 pt-0.5">
+        <div class="flex items-center justify-between px-1 mb-1">
+            <span class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-cyan-300">
+                🃏 Tu Mano (Toca 1 carta)
+            </span>
+            <div class="flex items-center gap-2">
+                <button onclick="openArenasModal()" class="text-[10px] sm:text-xs font-bold text-amber-300 hover:underline">
+                    🏆 Arenas
+                </button>
+                <span id="score-summary" class="text-[10px] sm:text-xs font-semibold text-slate-400">
+                    0G - 0P
+                </span>
+            </div>
+        </div>
+        
+        <div id="player-hand" class="grid grid-cols-4 gap-1.5 sm:gap-3 justify-items-center">
+            <!-- Cartas renderizadas por JS -->
+        </div>
+    </footer>
+
+    <!-- MODAL DE ARENAS Y PROGRESO DE TROFEOS -->
+    <div id="arenas-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden items-center justify-center p-2.5 sm:p-4">
+        <div class="bg-slate-900 border border-amber-500/50 rounded-3xl max-w-xl w-full max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-3 sm:p-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="font-epic text-base sm:text-xl font-black text-amber-300">🏆 Camino de Trofeos y Arenas</h3>
+                    <p class="text-[11px] text-slate-400">Sube de Arena para desbloquear cartas más poderosas en sobres y cofres</p>
+                </div>
+                <button onclick="closeModal('arenas-modal')" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-lg flex items-center justify-center">
+                    &times;
+                </button>
+            </div>
+            <div id="arenas-list-container" class="p-3 sm:p-4 overflow-y-auto modal-scroll flex-1 space-y-2.5">
+                <!-- Renderizado dinámicamente por JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DETALLADO DE VENTAJAS ELEMENTALES -->
+    <div id="element-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-amber-500/50 rounded-3xl max-w-sm w-full p-5 shadow-2xl">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-epic text-lg font-bold text-amber-300">⚔️ Tabla de Ventajas</h3>
+                <button onclick="closeModal('element-modal')" class="text-slate-400 hover:text-white text-2xl font-bold leading-none">&times;</button>
+            </div>
+            <p class="text-xs text-slate-300 mb-3">
+                Si tu carta tiene ventaja elemental sobre la carta del rival, recibe un bono instantáneo de <strong class="text-amber-400">+12 ⚡ de Poder</strong> antes de comparar.
+            </p>
+            <div class="space-y-2 text-xs">
+                <div class="p-2.5 rounded-xl bg-slate-950 border border-orange-500/30 flex items-center justify-between">
+                    <span class="font-bold text-orange-400">🔥 Fuego</span>
+                    <span class="text-emerald-400 font-bold">vence a (+12⚡) ➔</span>
+                    <span class="font-bold text-emerald-400">🌿 Tierra</span>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-950 border border-emerald-500/30 flex items-center justify-between">
+                    <span class="font-bold text-emerald-400">🌿 Tierra</span>
+                    <span class="text-emerald-400 font-bold">vence a (+12⚡) ➔</span>
+                    <span class="font-bold text-sky-400">💧 Agua</span>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-950 border border-sky-500/30 flex items-center justify-between">
+                    <span class="font-bold text-sky-400">💧 Agua</span>
+                    <span class="text-emerald-400 font-bold">vence a (+12⚡) ➔</span>
+                    <span class="font-bold text-orange-400">🔥 Fuego</span>
+                </div>
+                <div class="p-2.5 rounded-xl bg-slate-950 border border-purple-500/30 flex items-center justify-between">
+                    <span class="font-bold text-amber-300">✨ Luz</span>
+                    <span class="text-amber-300 font-bold">⇄ Choque (+12⚡) ⇄</span>
+                    <span class="font-bold text-purple-400">🌑 Sombra</span>
+                </div>
+            </div>
+            <button onclick="closeModal('element-modal')" class="mt-4 w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 font-bold text-slate-950 shadow-lg">
+                Volver al Duelo
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL DE TIENDA DE SOBRES Y MI MAZO / MEJORAS -->
+    <div id="shop-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden items-center justify-center p-2.5 sm:p-4">
+        <div class="bg-slate-900 border border-amber-500/40 rounded-3xl max-w-2xl w-full max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
+            
+            <!-- Cabecera Modal Tienda -->
+            <div class="p-3 sm:p-4 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between shrink-0 gap-1">
+                <div class="flex items-center gap-1.5">
+                    <button id="tab-shop-btn" onclick="switchShopTab('shop')" class="px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-amber-500 text-slate-950 transition">
+                        🛒 Tienda
+                    </button>
+                    <button id="tab-collection-btn" onclick="switchShopTab('collection')" class="px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-slate-800 text-slate-300 hover:bg-slate-700 transition">
+                        🃏 Mazo y Mejoras (<span id="collection-count-label">6/24</span>)
+                    </button>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <div class="flex items-center gap-1 bg-amber-950 border border-amber-400/50 px-2 py-1 rounded-full text-xs sm:text-sm font-black text-amber-300">
+                        <span>💰</span>
+                        <span id="modal-coin-balance">150</span>
+                    </div>
+                    <button onclick="closeModal('shop-modal')" class="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-lg flex items-center justify-center">
+                        &times;
+                    </button>
+                </div>
+            </div>
+
+            <!-- Contenido Pestaña 1: TIENDA DE SOBRES (Escala según la Arena actual) -->
+            <div id="shop-tab-content" class="p-3 sm:p-5 overflow-y-auto modal-scroll flex-1 space-y-3">
+                
+                <!-- Indicador de Pool de Arena en Tienda -->
+                <div id="shop-arena-banner" class="bg-indigo-950/80 border border-indigo-400/40 rounded-2xl p-2.5 flex items-center justify-between text-xs">
+                    <span class="font-bold text-indigo-200">🌲 Sobres de Arena 1: Bosque Elemental</span>
+                    <span class="text-amber-300 font-extrabold">6/24 cartas disponibles</span>
+                </div>
+
+                <!-- Banner Cofre Gratis dentro de la tienda -->
+                <div class="bg-gradient-to-r from-emerald-950 to-teal-950 border border-emerald-500/40 rounded-2xl p-3 flex items-center justify-between gap-2">
+                    <div>
+                        <div class="text-xs sm:text-sm font-extrabold text-emerald-300">🎁 Cofre de Arena Gratis</div>
+                        <div id="chest-reward-desc" class="text-[11px] text-slate-300">Recibe <strong>+40 💰</strong> y <strong>1 carta aleatoria</strong> de tu Arena cada 30s.</div>
+                    </div>
+                    <button id="modal-free-chest-btn" onclick="claimFreeChest()" class="shrink-0 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg active:scale-95 transition">
+                        Abrir Cofre
+                    </button>
+                </div>
+
+                <!-- Mensaje rápido de estado de compra -->
+                <div id="shop-feedback" class="hidden text-center text-xs font-bold py-1.5 px-3 rounded-xl bg-rose-950/90 border border-rose-500/50 text-rose-200"></div>
+
+                <!-- Catálogo de 3 Sobres -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                    <!-- Sobre Básico -->
+                    <div class="bg-slate-950/90 border border-sky-500/40 rounded-2xl p-3 flex flex-col justify-between text-center relative overflow-hidden">
+                        <div>
+                            <div class="text-3xl sm:text-4xl mb-1">📦</div>
+                            <h4 class="font-epic font-bold text-sm sm:text-base text-sky-300">Sobre Básico</h4>
+                            <p class="text-[11px] text-slate-400 mt-0.5">3 cartas de tu Arena para subir niveles rápido.</p>
+                        </div>
+                        <button onclick="buyPack('basic')" class="mt-3 w-full py-2 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 font-black text-xs sm:text-sm text-white shadow active:scale-95 transition">
+                            Comprar • 80 💰
+                        </button>
+                    </div>
+
+                    <!-- Sobre Élite -->
+                    <div class="bg-slate-950/90 border border-purple-500/50 rounded-2xl p-3 flex flex-col justify-between text-center relative overflow-hidden shadow-lg shadow-purple-950/30">
+                        <span class="absolute top-2 right-2 text-[9px] font-black uppercase bg-purple-600 text-white px-1.5 py-0.5 rounded">Popular</span>
+                        <div>
+                            <div class="text-3xl sm:text-4xl mb-1">🔮</div>
+                            <h4 class="font-epic font-bold text-sm sm:text-base text-purple-300">Sobre Élite</h4>
+                            <p class="text-[11px] text-slate-400 mt-0.5">4 cartas • Garantiza Rara/Épica de tus Arenas desbloqueadas.</p>
+                        </div>
+                        <button onclick="buyPack('elite')" class="mt-3 w-full py-2 rounded-xl bg-gradient-to-r from-purple-500 to-fuchsia-600 hover:from-purple-400 hover:to-fuchsia-500 font-black text-xs sm:text-sm text-white shadow active:scale-95 transition">
+                            Comprar • 180 💰
+                        </button>
+                    </div>
+
+                    <!-- Sobre Mítico -->
+                    <div class="bg-slate-950/90 border border-amber-400/60 rounded-2xl p-3 flex flex-col justify-between text-center relative overflow-hidden shadow-lg shadow-amber-950/30">
+                        <span class="absolute top-2 right-2 text-[9px] font-black uppercase bg-amber-500 text-slate-950 px-1.5 py-0.5 rounded">Top</span>
+                        <div>
+                            <div class="text-3xl sm:text-4xl mb-1">👑</div>
+                            <h4 class="font-epic font-bold text-sm sm:text-base text-amber-300">Sobre Mítico</h4>
+                            <p class="text-[11px] text-slate-400 mt-0.5">5 cartas • Máxima probabilidad de Épicas y Legendarias.</p>
+                        </div>
+                        <button onclick="buyPack('mythic')" class="mt-3 w-full py-2 rounded-xl bg-gradient-to-r from-amber-400 via-orange-500 to-rose-500 hover:brightness-110 font-black text-xs sm:text-sm text-slate-950 shadow active:scale-95 transition">
+                            Comprar • 350 💰
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-center text-[11px] text-slate-400 pt-1">
+                    💡 Las cartas repetidas se acumulan para subir tus cartas hasta <strong class="text-emerald-300">Nivel 10</strong> (+5⚡ por nivel).
+                </div>
+            </div>
+
+            <!-- Contenido Pestaña 2: MI MAZO Y MEJORAS DE NIVEL -->
+            <div id="collection-tab-content" class="hidden p-3 sm:p-4 overflow-y-auto modal-scroll flex-1">
+                <div class="flex items-center justify-between mb-2.5 text-xs text-slate-300 bg-slate-950/80 p-2 rounded-xl border border-slate-800">
+                    <span>Acumula copias repetidas y toca <strong>Mejorar</strong> para subir su poder ⚡ permanente.</span>
+                </div>
+                <div id="collection-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                    <!-- Renderizado por JS -->
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL DE APERTURA DE SOBRE / COFRE INTERACTIVO 3D -->
+    <div id="pack-opening-modal" class="fixed inset-0 bg-black/90 backdrop-blur-md z-50 hidden items-center justify-center p-3">
+        <div class="bg-slate-900 border-2 border-amber-400/70 rounded-3xl max-w-xl w-full p-4 sm:p-6 text-center shadow-2xl">
+            <h3 id="pack-opening-title" class="font-epic text-lg sm:text-2xl font-black text-amber-300 mb-1">
+                ✨ ¡Sobre Abierto!
+            </h3>
+            <p id="pack-opening-subtitle" class="text-xs text-slate-300 mb-4">Toca cada carta para revelarla</p>
+
+            <div id="pack-cards-container" class="flex flex-wrap justify-center gap-2 sm:gap-3 mb-5">
+                <!-- Cartas volteables -->
+            </div>
+
+            <div class="flex gap-2 justify-center">
+                <button id="reveal-all-pack-btn" onclick="revealAllPackCards()" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-600 text-xs sm:text-sm font-bold text-white">
+                    Voltear Todas
+                </button>
+                <button id="close-pack-btn" onclick="closePackOpening()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 text-xs sm:text-sm font-black shadow-lg">
+                    Continuar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE FIN DE PARTIDA CON TROFEOS, CAMBIO DE ARENA Y MONEDAS -->
+    <div id="game-over-modal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden items-center justify-center p-4">
+        <div id="game-over-card" class="bg-slate-900 border-2 border-indigo-500 rounded-3xl max-w-sm w-full p-5 text-center shadow-2xl">
+            <div id="end-emoji" class="text-4xl sm:text-5xl mb-1 animate-bounce">🏆</div>
+            <h2 id="end-title" class="font-epic text-2xl font-black tracking-wide mb-1 text-amber-400">
+                ¡VICTORIA!
+            </h2>
+            <p id="end-subtitle" class="text-slate-300 text-xs sm:text-sm mb-3">
+                Has derrotado a tu rival en la arena.
+            </p>
+
+            <!-- Banner animado si subió o bajó de Arena -->
+            <div id="arena-change-banner" class="hidden mb-3 py-2 px-3 rounded-2xl font-extrabold text-xs sm:text-sm animate-pulse">
+            </div>
+
+            <!-- Recompensas de Trofeos y Monedas -->
+            <div class="flex items-center justify-center gap-2 mb-3">
+                <div id="end-trophies-earned" class="bg-amber-950/90 border border-amber-400/60 text-amber-300 font-black text-xs sm:text-sm px-3 py-1 rounded-full">
+                    +30 🏆
+                </div>
+                <div id="end-coins-earned" class="bg-emerald-950/90 border border-emerald-400/60 text-emerald-300 font-black text-xs sm:text-sm px-3 py-1 rounded-full">
+                    +60 💰
+                </div>
+            </div>
+
+            <!-- Barra de progreso de Arena actual -->
+            <div class="bg-slate-950 border border-slate-800 rounded-xl p-2.5 mb-3 text-left">
+                <div class="flex items-center justify-between text-[11px] font-bold mb-1">
+                    <span id="end-arena-label" class="text-emerald-300">🌲 Arena 1: Bosque Elemental</span>
+                    <span id="end-trophy-progress-text" class="text-amber-300">30 / 100 🏆</span>
+                </div>
+                <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="end-trophy-bar" class="h-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-700" style="width: 30%"></div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 bg-slate-950 border border-slate-800 rounded-xl p-2 mb-4 text-xs">
+                <div>
+                    <div class="text-slate-400">Rondas</div>
+                    <div id="stat-rounds" class="text-sm font-extrabold text-white">0</div>
+                </div>
+                <div>
+                    <div class="text-slate-400">Ganadas</div>
+                    <div id="stat-wins" class="text-sm font-extrabold text-emerald-400">0</div>
+                </div>
+                <div>
+                    <div class="text-slate-400">Perdidas</div>
+                    <div id="stat-losses" class="text-sm font-extrabold text-rose-400">0</div>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="closeModal('game-over-modal'); openShopModal('shop');" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-black text-slate-950 text-xs sm:text-sm shadow-lg active:scale-95 transition">
+                    🛒 Sobres
+                </button>
+                <button id="play-again-btn" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-600 to-fuchsia-600 font-extrabold text-white text-xs sm:text-sm shadow-lg active:scale-95 transition">
+                    🔄 Jugar Otra
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * SISTEMA DE 5 ARENAS PROGRESIVAS ESTILO CLASH ROYALE
+         */
+        const ELEMENT_BONUS = 12;
+        const STORAGE_KEY = "duelo_poder_save_v2";
+        const FREE_CHEST_COOLDOWN_MS = 30000;
+        const MAX_CARD_LEVEL = 10;
+        const POWER_GAIN_PER_LEVEL = 5;
+
+        const ARENAS = [
+            {
+                id: 1,
+                name: "Bosque Elemental",
+                minTrophies: 0,
+                maxTrophies: 99,
+                icon: "🌲",
+                borderClass: "border-emerald-500/45",
+                badgeClass: "text-emerald-300",
+                winCoins: 60,
+                chestCoins: 40,
+                aiLevelRange: [1, 2],
+                aiSmartChance: 0.35
+            },
+            {
+                id: 2,
+                name: "Volcán Carmesí",
+                minTrophies: 100,
+                maxTrophies: 249,
+                icon: "🌋",
+                borderClass: "border-orange-500/55",
+                badgeClass: "text-orange-300",
+                winCoins: 85,
+                chestCoins: 55,
+                aiLevelRange: [2, 3],
+                aiSmartChance: 0.45
+            },
+            {
+                id: 3,
+                name: "Abismo Abisal",
+                minTrophies: 250,
+                maxTrophies: 449,
+                icon: "🌊",
+                borderClass: "border-sky-500/60",
+                badgeClass: "text-sky-300",
+                winCoins: 115,
+                chestCoins: 75,
+                aiLevelRange: [3, 5],
+                aiSmartChance: 0.55
+            },
+            {
+                id: 4,
+                name: "Templo Celestial",
+                minTrophies: 450,
+                maxTrophies: 699,
+                icon: "🏛️",
+                borderClass: "border-purple-500/65",
+                badgeClass: "text-purple-300",
+                winCoins: 150,
+                chestCoins: 100,
+                aiLevelRange: [5, 7],
+                aiSmartChance: 0.65
+            },
+            {
+                id: 5,
+                name: "Trono Mítico",
+                minTrophies: 700,
+                maxTrophies: 99999,
+                icon: "👑",
+                borderClass: "border-amber-400/75",
+                badgeClass: "text-amber-300",
+                winCoins: 200,
+                chestCoins: 140,
+                aiLevelRange: [7, 9],
+                aiSmartChance: 0.75
+            }
+        ];
+
+        /**
+         * CATÁLOGO DE 24 CARTAS REPARTIDAS EN LAS 5 ARENAS
+         */
+        const CARD_CATALOG = [
+            // ARENA 1: Bosque Elemental (6 cartas iniciales desbloqueadas)
+            { id: "c01", arena: 1, name: "Duende", power: 24, rarity: "Común", element: "Tierra", icon: "👺", starter: true },
+            { id: "c02", arena: 1, name: "Slime Azul", power: 28, rarity: "Común", element: "Agua", icon: "🦠", starter: true },
+            { id: "c03", arena: 1, name: "Espectro", power: 32, rarity: "Común", element: "Sombra", icon: "💀", starter: true },
+            { id: "c04", arena: 1, name: "Chispa", power: 36, rarity: "Común", element: "Fuego", icon: "🔥", starter: true },
+            { id: "c05", arena: 1, name: "Escudero", power: 40, rarity: "Común", element: "Luz", icon: "🛡️", starter: true },
+            { id: "c06", arena: 1, name: "Lobo Bosque", power: 45, rarity: "Rara", element: "Tierra", icon: "🐺", starter: true },
+
+            // ARENA 2: Volcán Carmesí (5 cartas)
+            { id: "c07", arena: 2, name: "Nutria Río", power: 48, rarity: "Común", element: "Agua", icon: "🦦", starter: false },
+            { id: "c08", arena: 2, name: "Gólem Roca", power: 52, rarity: "Rara", element: "Tierra", icon: "🗿", starter: false },
+            { id: "c09", arena: 2, name: "Salamandra", power: 56, rarity: "Rara", element: "Fuego", icon: "🦎", starter: false },
+            { id: "c10", arena: 2, name: "Murciélago", power: 58, rarity: "Común", element: "Sombra", icon: "🦇", starter: false },
+            { id: "c11", arena: 2, name: "Pirotecnia", power: 62, rarity: "Rara", element: "Fuego", icon: "🧨", starter: false },
+
+            // ARENA 3: Abismo Abisal (5 cartas)
+            { id: "c12", arena: 3, name: "Sirena", power: 64, rarity: "Rara", element: "Agua", icon: "🧜‍♀️", starter: false },
+            { id: "c13", arena: 3, name: "Ninja", power: 67, rarity: "Rara", element: "Sombra", icon: "🥷", starter: false },
+            { id: "c14", arena: 3, name: "Ciclón", power: 70, rarity: "Rara", element: "Agua", icon: "🌊", starter: false },
+            { id: "c15", arena: 3, name: "Dríade", power: 73, rarity: "Épica", element: "Tierra", icon: "🧚", starter: false },
+            { id: "c16", arena: 3, name: "Leviatán", power: 77, rarity: "Épica", element: "Agua", icon: "🐋", starter: false },
+
+            // ARENA 4: Templo Celestial (4 cartas)
+            { id: "c17", arena: 4, name: "Paladín", power: 78, rarity: "Rara", element: "Luz", icon: "⚔️", starter: false },
+            { id: "c18", arena: 4, name: "Valquiria", power: 82, rarity: "Épica", element: "Luz", icon: "👼", starter: false },
+            { id: "c19", arena: 4, name: "Brujo Oscuro", power: 85, rarity: "Épica", element: "Sombra", icon: "🔮", starter: false },
+            { id: "c20", arena: 4, name: "Titán Tierra", power: 88, rarity: "Épica", element: "Tierra", icon: "🌋", starter: false },
+
+            // ARENA 5: Trono Mítico (4 cartas definitivas)
+            { id: "c21", arena: 5, name: "Fénix Solar", power: 91, rarity: "Épica", element: "Fuego", icon: "🦅", starter: false },
+            { id: "c22", arena: 5, name: "Dragón Rey", power: 94, rarity: "Legendaria", element: "Fuego", icon: "🐲", starter: false },
+            { id: "c23", arena: 5, name: "Abismo Eterno", power: 97, rarity: "Legendaria", element: "Sombra", icon: "🌌", starter: false },
+            { id: "c24", arena: 5, name: "Cronos", power: 100, rarity: "Legendaria", element: "Luz", icon: "👑", starter: false }
+        ];
+
+        // Requisitos de copias y monedas para subir cada nivel (Nv. 1 -> Nv. 10)
+        const UPGRADE_COSTS = {
+            1: { copies: 2, coins: 40 },
+            2: { copies: 3, coins: 75 },
+            3: { copies: 4, coins: 120 },
+            4: { copies: 6, coins: 180 },
+            5: { copies: 8, coins: 260 },
+            6: { copies: 10, coins: 360 },
+            7: { copies: 12, coins: 500 },
+            8: { copies: 15, coins: 700 },
+            9: { copies: 20, coins: 1000 }
+        };
+
+        const PACK_CONFIG = {
+            basic: {
+                name: "Sobre Básico",
+                cost: 80,
+                count: 3,
+                weights: { "Común": 60, "Rara": 32, "Épica": 7, "Legendaria": 1 },
+                guaranteedMinRarity: null
+            },
+            elite: {
+                name: "Sobre Élite",
+                cost: 180,
+                count: 4,
+                weights: { "Común": 20, "Rara": 50, "Épica": 23, "Legendaria": 7 },
+                guaranteedMinRarity: "Rara"
+            },
+            mythic: {
+                name: "Sobre Mítico",
+                cost: 350,
+                count: 5,
+                weights: { "Común": 5, "Rara": 25, "Épica": 48, "Legendaria": 22 },
+                guaranteedMinRarity: "Épica"
+            }
+        };
+
+        const MAX_LEVEL_REFUND = {
+            "Común": 25,
+            "Rara": 50,
+            "Épica": 90,
+            "Legendaria": 150
+        };
+
+        const ELEMENT_META = {
+            "Fuego":  { icon: "🔥", color: "text-orange-400", bg: "bg-orange-500/20 border-orange-500/40" },
+            "Agua":   { icon: "💧", color: "text-sky-400",    bg: "bg-sky-500/20 border-sky-500/40" },
+            "Tierra": { icon: "🌿", color: "text-emerald-400",bg: "bg-emerald-500/20 border-emerald-500/40" },
+            "Luz":    { icon: "✨", color: "text-amber-300",  bg: "bg-amber-500/20 border-amber-500/40" },
+            "Sombra": { icon: "🌑", color: "text-purple-400", bg: "bg-purple-500/20 border-purple-500/40" }
+        };
+
+        const RARITY_STYLES = {
+            "Común":      { cardClass: "rarity-comun",      badgeClass: "bg-slate-700 text-slate-200 border-slate-500" },
+            "Rara":       { cardClass: "rarity-rara",       badgeClass: "bg-sky-900/90 text-sky-200 border-sky-400" },
+            "Épica":      { cardClass: "rarity-epica",      badgeClass: "bg-purple-900/90 text-purple-200 border-purple-400" },
+            "Legendaria": { cardClass: "rarity-legendaria", badgeClass: "bg-amber-900/90 text-amber-200 border-amber-400" }
+        };
+
+        function hasElementAdvantage(attackerEl, defenderEl) {
+            if (attackerEl === "Fuego" && defenderEl === "Tierra") return true;
+            if (attackerEl === "Tierra" && defenderEl === "Agua") return true;
+            if (attackerEl === "Agua" && defenderEl === "Fuego") return true;
+            if (attackerEl === "Luz" && defenderEl === "Sombra") return true;
+            if (attackerEl === "Sombra" && defenderEl === "Luz") return true;
+            return false;
+        }
+
+        /**
+         * EFECTOS DE SONIDO CON TONE.JS
+         */
+        class SoundEffects {
+            constructor() {
+                this.enabled = true;
+                this.initialized = false;
+                this.synth = null;
+            }
+            async init() {
+                if (this.initialized) return;
+                try {
+                    await Tone.start();
+                    this.synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                    this.synth.volume.value = -9;
+                    this.initialized = true;
+                } catch (e) {}
+            }
+            playCardPlay() {
+                if (!this.enabled) return;
+                this.init();
+                this.synth?.triggerAttackRelease(["C4", "G4"], "16n");
+            }
+            playCardFlip() {
+                if (!this.enabled) return;
+                this.init();
+                this.synth?.triggerAttackRelease(["E4", "B4"], "16n");
+            }
+            playWinRound() {
+                if (!this.enabled) return;
+                this.init();
+                const now = Tone.now();
+                this.synth?.triggerAttackRelease("C5", "16n", now);
+                this.synth?.triggerAttackRelease("E5", "16n", now + 0.08);
+                this.synth?.triggerAttackRelease("G5", "8n", now + 0.16);
+            }
+            playLoseRound() {
+                if (!this.enabled) return;
+                this.init();
+                const now = Tone.now();
+                this.synth?.triggerAttackRelease("G3", "16n", now);
+                this.synth?.triggerAttackRelease("Eb3", "8n", now + 0.12);
+            }
+            playDrawRound() {
+                if (!this.enabled) return;
+                this.init();
+                this.synth?.triggerAttackRelease(["D4", "A4"], "8n");
+            }
+            playGameOver(win) {
+                if (!this.enabled) return;
+                this.init();
+                const now = Tone.now();
+                if (win) {
+                    this.synth?.triggerAttackRelease("C5", "16n", now);
+                    this.synth?.triggerAttackRelease("G5", "16n", now + 0.12);
+                    this.synth?.triggerAttackRelease("C6", "4n", now + 0.24);
+                } else {
+                    this.synth?.triggerAttackRelease("D3", "8n", now);
+                    this.synth?.triggerAttackRelease("C3", "4n", now + 0.2);
+                }
+            }
+            playCoin() {
+                if (!this.enabled) return;
+                this.init();
+                const now = Tone.now();
+                this.synth?.triggerAttackRelease("B5", "32n", now);
+                this.synth?.triggerAttackRelease("E6", "16n", now + 0.06);
+            }
+            playLevelUp() {
+                if (!this.enabled) return;
+                this.init();
+                const now = Tone.now();
+                this.synth?.triggerAttackRelease("D5", "16n", now);
+                this.synth?.triggerAttackRelease("F#5", "16n", now + 0.07);
+                this.synth?.triggerAttackRelease("A5", "16n", now + 0.14);
+                this.synth?.triggerAttackRelease("D6", "8n", now + 0.21);
+            }
+            playPackOpen(isHighRarity = false) {
+                if (!this.enabled) return;
+                this.init();
+                const now = Tone.now();
+                if (isHighRarity) {
+                    this.synth?.triggerAttackRelease("C5", "16n", now);
+                    this.synth?.triggerAttackRelease("E5", "16n", now + 0.08);
+                    this.synth?.triggerAttackRelease("G5", "16n", now + 0.16);
+                    this.synth?.triggerAttackRelease("C6", "4n", now + 0.24);
+                } else {
+                    this.synth?.triggerAttackRelease(["F4", "A4", "C5"], "16n", now);
+                }
+            }
+        }
+        const sfx = new SoundEffects();
+
+        /**
+         * PERFIL DEL JUGADOR EN LOCALSTORAGE (Trofeos, Monedas, Niveles y Copias)
+         */
+        let playerProfile = {
+            coins: 150,
+            trophies: 0,
+            cards: {}, // { cardId: { unlocked: true, level: 1, copies: 0 } }
+            lastChestClaim: 0
+        };
+
+        function loadProfile() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    playerProfile.coins = typeof parsed.coins === "number" ? parsed.coins : 150;
+                    playerProfile.trophies = typeof parsed.trophies === "number" ? Math.max(0, parsed.trophies) : 0;
+                    playerProfile.cards = parsed.cards || {};
+                    playerProfile.lastChestClaim = parsed.lastChestClaim || 0;
+                }
+            } catch (e) {}
+
+            // Inicializar las 6 cartas iniciales de Arena 1
+            CARD_CATALOG.forEach(c => {
+                if (c.starter && !playerProfile.cards[c.id]) {
+                    playerProfile.cards[c.id] = { unlocked: true, level: 1, copies: 0 };
+                }
+            });
+            saveProfile();
+        }
+
+        function saveProfile() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(playerProfile));
+            } catch (e) {}
+        }
+
+        function getCurrentArena(trophies = playerProfile.trophies) {
+            for (let i = ARENAS.length - 1; i >= 0; i--) {
+                if (trophies >= ARENAS[i].minTrophies) return ARENAS[i];
+            }
+            return ARENAS[0];
+        }
+
+        function getCardPowerAtLevel(basePower, level) {
+            return basePower + (level - 1) * POWER_GAIN_PER_LEVEL;
+        }
+
+        function getUnlockedCount() {
+            return CARD_CATALOG.filter(c => playerProfile.cards[c.id]?.unlocked).length;
+        }
+
+        function hasAnyUpgradableCard() {
+            return CARD_CATALOG.some(c => {
+                const info = playerProfile.cards[c.id];
+                if (!info || !info.unlocked || info.level >= MAX_CARD_LEVEL) return false;
+                const req = UPGRADE_COSTS[info.level];
+                return info.copies >= req.copies && playerProfile.coins >= req.coins;
+            });
+        }
+
+        function addCoins(amount, playSound = true) {
+            playerProfile.coins = Math.max(0, playerProfile.coins + amount);
+            saveProfile();
+            updateTopEconomyUI(amount);
+            if (playSound && amount > 0) sfx.playCoin();
+        }
+
+        function updateTopEconomyUI(coinDelta = 0) {
+            document.getElementById('coin-balance').textContent = playerProfile.coins;
+            const modalCoin = document.getElementById('modal-coin-balance');
+            if (modalCoin) modalCoin.textContent = playerProfile.coins;
+
+            // Trofeos y Arena actual
+            const arena = getCurrentArena();
+            document.getElementById('trophy-balance').textContent = playerProfile.trophies;
+            document.getElementById('header-arena-icon').textContent = arena.icon;
+            document.getElementById('header-arena-name').textContent = `Arena ${arena.id}`;
+            document.getElementById('header-arena-name').className = `text-[10px] sm:text-xs font-extrabold ${arena.badgeClass}`;
+
+            // Barra de progreso hacia siguiente arena
+            const nextArena = ARENAS.find(a => a.id === arena.id + 1);
+            let pct = 100;
+            if (nextArena) {
+                const span = nextArena.minTrophies - arena.minTrophies;
+                const prog = playerProfile.trophies - arena.minTrophies;
+                pct = Math.min(100, Math.max(0, Math.round((prog / span) * 100)));
+            }
+            document.getElementById('header-trophy-bar').style.width = `${pct}%`;
+
+            // Borde del tablero adaptado a la Arena
+            const battleArena = document.getElementById('battle-arena');
+            if (battleArena) {
+                battleArena.className = `flex-1 min-w-0 bg-slate-900/65 backdrop-blur-md border-2 ${arena.borderClass} rounded-2xl p-2 sm:p-4 flex flex-col justify-between relative overflow-hidden shadow-xl transition-colors duration-500`;
+            }
+
+            // Contador colección e indicador de mejora disponible
+            const unlocked = getUnlockedCount();
+            const colLabel = document.getElementById('collection-count-label');
+            if (colLabel) colLabel.textContent = `${unlocked}/${CARD_CATALOG.length}`;
+
+            const dot = document.getElementById('upgradable-dot');
+            if (dot) {
+                if (hasAnyUpgradableCard()) dot.classList.remove('hidden');
+                else dot.classList.add('hidden');
+            }
+
+            if (coinDelta !== 0) {
+                const container = document.getElementById('coin-delta-container');
+                const pop = document.createElement('span');
+                pop.className = `coin-pop inline-block text-xs font-black px-1.5 py-0.2 rounded-full ${coinDelta > 0 ? 'bg-emerald-500 text-slate-950' : 'bg-rose-500 text-white'}`;
+                pop.textContent = coinDelta > 0 ? `+${coinDelta}💰` : `${coinDelta}💰`;
+                container.appendChild(pop);
+                setTimeout(() => pop.remove(), 950);
+            }
+        }
+
+        /**
+         * COFRE GRATIS DE ARENA (Monedas + 1 Carta de tu Arena actual o anterior)
+         */
+        function claimFreeChest() {
+            const now = Date.now();
+            if (now - playerProfile.lastChestClaim < FREE_CHEST_COOLDOWN_MS) return;
+
+            const arena = getCurrentArena();
+            playerProfile.lastChestClaim = now;
+            addCoins(arena.chestCoins, false);
+
+            // Elegir 1 carta del pool de la Arena actual o anteriores
+            const availablePool = CARD_CATALOG.filter(c => c.arena <= arena.id);
+            const chosenCard = availablePool[Math.floor(Math.random() * availablePool.length)];
+            const pullResult = grantCardToPlayer(chosenCard);
+
+            saveProfile();
+            updateTopEconomyUI(0);
+            updateChestButtons();
+            state.playerDeck = buildPlayerDeckFromCollection();
+
+            // Mostrar apertura rápida del cofre
+            currentPackPulls = [{ ...pullResult, revealed: false }];
+            openPackOpeningModal(
+                `🎁 Cofre de Arena ${arena.id} (+${arena.chestCoins} 💰)`,
+                "Toca la carta del cofre para revelarla"
+            );
+        }
+
+        function updateChestButtons() {
+            const arena = getCurrentArena();
+            const now = Date.now();
+            const remaining = Math.max(0, FREE_CHEST_COOLDOWN_MS - (now - playerProfile.lastChestClaim));
+            const topBtn = document.getElementById('free-chest-btn');
+            const modalBtn = document.getElementById('modal-free-chest-btn');
+
+            if (remaining === 0) {
+                topBtn.disabled = false;
+                topBtn.textContent = `🎁 +${arena.chestCoins}💰`;
+                topBtn.className = "px-1.5 py-0.5 rounded-full bg-emerald-500 hover:bg-emerald-400 border border-emerald-200 text-[9px] sm:text-[11px] font-black text-slate-950 animate-pulse cursor-pointer";
+                if (modalBtn) {
+                    modalBtn.disabled = false;
+                    modalBtn.textContent = `Abrir (+${arena.chestCoins}💰 + 1🃏)`;
+                    modalBtn.className = "shrink-0 px-3 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs shadow-lg active:scale-95 transition cursor-pointer";
+                }
+            } else {
+                const secs = Math.ceil(remaining / 1000);
+                topBtn.disabled = true;
+                topBtn.textContent = `⏳ ${secs}s`;
+                topBtn.className = "px-1.5 py-0.5 rounded-full bg-slate-800 border border-slate-700 text-[9px] sm:text-[11px] font-bold text-slate-400 cursor-not-allowed";
+                if (modalBtn) {
+                    modalBtn.disabled = true;
+                    modalBtn.textContent = `Espera ${secs}s`;
+                    modalBtn.className = "shrink-0 px-3 py-2 rounded-xl bg-slate-800 text-slate-400 font-bold text-xs cursor-not-allowed";
+                }
+            }
+        }
+
+        /**
+         * ESTADO Y LÓGICA DEL DUELO
+         */
+        const MAX_LIVES = 5;
+        const HAND_SIZE = 4;
+
+        let state = {
+            playerLives: MAX_LIVES,
+            aiLives: MAX_LIVES,
+            round: 1,
+            wins: 0,
+            losses: 0,
+            winStreak: 0,
+            playerDeck: [],
+            aiDeck: [],
+            playerHand: [],
+            aiHand: [],
+            isBusy: false
+        };
+
+        // Construye el mazo del jugador con el nivel real mejorado de cada carta
+        function buildPlayerDeckFromCollection() {
+            const deck = [];
+            CARD_CATALOG.forEach(c => {
+                const info = playerProfile.cards[c.id];
+                if (info && info.unlocked) {
+                    const effectiveBasePower = getCardPowerAtLevel(c.power, info.level);
+                    deck.push({
+                        ...c,
+                        level: info.level,
+                        power: effectiveBasePower,
+                        uid: Math.random().toString(36).slice(2)
+                    });
+                }
+            });
+
+            while (deck.length < 16) {
+                const base = [...deck];
+                base.forEach(c => deck.push({ ...c, uid: Math.random().toString(36).slice(2) }));
+            }
+
+            for (let i = deck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deck[i], deck[j]] = [deck[j], deck[i]];
+            }
+            return deck;
+        }
+
+        // La IA arma su mazo acorde a la Arena actual y niveles del rival
+        function buildAIDeck() {
+            const arena = getCurrentArena();
+            const pool = CARD_CATALOG.filter(c => c.arena <= arena.id);
+            const [minLvl, maxLvl] = arena.aiLevelRange;
+
+            const deck = [];
+            for (let i = 0; i < 16; i++) {
+                const template = pool[Math.floor(Math.random() * pool.length)];
+                const aiLevel = minLvl + Math.floor(Math.random() * (maxLvl - minLvl + 1));
+                deck.push({
+                    ...template,
+                    level: aiLevel,
+                    power: getCardPowerAtLevel(template.power, aiLevel),
+                    uid: Math.random().toString(36).slice(2)
+                });
+            }
+            return deck;
+        }
+
+        function drawCards(deck, hand, count, isPlayer = false) {
+            for (let i = 0; i < count; i++) {
+                if (deck.length === 0) {
+                    deck.push(...(isPlayer ? buildPlayerDeckFromCollection() : buildAIDeck()));
+                }
+                hand.push(deck.pop());
+            }
+        }
+
+        /**
+         * RENDERIZADO DE CARTA CON NIVEL (Nv.X) Y PODER ACTUALIZADO
+         */
+        function createCardHTML(card, isHandCard = false, index = -1, effectivePower = null, gotBonus = false) {
+            const rStyle = RARITY_STYLES[card.rarity] || RARITY_STYLES["Común"];
+            const eMeta = ELEMENT_META[card.element] || ELEMENT_META["Fuego"];
+            const shownPower = effectivePower !== null ? effectivePower : card.power;
+            const powerColor = gotBonus ? "text-emerald-400 animate-pulse" : "text-white";
+            const level = card.level || 1;
+
+            const sizeClass = isHandCard
+                ? `hand-card w-full max-w-[140px] h-[126px] sm:h-48 ${state.isBusy ? 'disabled' : ''}`
+                : `w-full h-full`;
+
+            return `
+                <div class="${sizeClass} ${rStyle.cardClass} rounded-xl p-1.5 sm:p-2.5 flex flex-col justify-between relative overflow-hidden shadow-lg"
+                     ${isHandCard ? `onclick="handlePlayerSelectCard(${index})"` : ''}>
+                    
+                    <!-- Top: Elemento y Poder -->
+                    <div class="flex items-center justify-between gap-0.5 z-10">
+                        <span class="text-[10px] sm:text-xs px-1.5 py-0.2 rounded-md border ${eMeta.bg} ${eMeta.color} font-bold">
+                            ${eMeta.icon}
+                        </span>
+                        <div class="flex items-center gap-0.5 bg-slate-950/90 border ${gotBonus ? 'border-emerald-400' : 'border-amber-400/60'} px-1.5 py-0.2 rounded-lg">
+                            <span class="text-amber-400 text-[10px] sm:text-xs">⚡</span>
+                            <span class="font-black text-xs sm:text-base ${powerColor}">${shownPower}</span>
+                        </div>
+                    </div>
+
+                    <!-- Centro: Icono + Etiqueta de Nivel -->
+                    <div class="my-auto flex flex-col items-center justify-center z-10 relative">
+                        <div class="w-10 h-10 sm:w-16 sm:h-16 rounded-xl bg-slate-950/60 border border-white/10 flex items-center justify-center text-2xl sm:text-4xl">
+                            ${card.icon}
+                        </div>
+                        <span class="-mt-2 px-1.5 py-0.2 rounded-full bg-indigo-950 border border-cyan-400/50 text-[8px] sm:text-[10px] font-black text-cyan-300">
+                            Nv.${level}
+                        </span>
+                    </div>
+
+                    <!-- Pie: Nombre y Elemento -->
+                    <div class="z-10 text-center bg-slate-950/80 rounded-lg px-1 py-0.5 sm:py-1 border border-white/10">
+                        <div class="font-bold text-[10px] sm:text-xs text-white truncate">
+                            ${card.name}
+                        </div>
+                        <div class="text-[8px] sm:text-[10px] text-slate-400 uppercase font-semibold leading-none mt-0.5">
+                            ${card.element}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderHearts(id, lives) {
+            const el = document.getElementById(id);
+            let html = '';
+            for (let i = 0; i < MAX_LIVES; i++) {
+                html += i < lives
+                    ? `<span>❤️</span>`
+                    : `<span class="opacity-25 grayscale">🖤</span>`;
+            }
+            el.innerHTML = html;
+        }
+
+        function renderAIHandBacks() {
+            const el = document.getElementById('ai-hand-backs');
+            el.innerHTML = state.aiHand.map(() => `
+                <div class="w-5 h-7 sm:w-7 sm:h-9 rounded bg-gradient-to-br from-indigo-900 to-purple-950 border border-indigo-400/50 flex items-center justify-center text-[9px] text-indigo-300">
+                    ✦
+                </div>
+            `).join('');
+        }
+
+        function renderPlayerHand() {
+            const el = document.getElementById('player-hand');
+            el.innerHTML = state.playerHand
+                .map((c, idx) => createCardHTML(c, true, idx))
+                .join('');
+        }
+
+        function updateHeaderUI() {
+            renderHearts('player-hearts', state.playerLives);
+            renderHearts('ai-hearts', state.aiLives);
+            document.getElementById('round-badge').textContent = `R${state.round}`;
+            document.getElementById('score-summary').textContent = `${state.wins}G - ${state.losses}P`;
+            updateTopEconomyUI(0);
+        }
+
+        function handlePlayerSelectCard(index) {
+            if (state.isBusy || index < 0 || index >= state.playerHand.length) return;
+            state.isBusy = true;
+            sfx.playCardPlay();
+
+            const playerCard = state.playerHand.splice(index, 1)[0];
+            renderPlayerHand();
+
+            const playerSlot = document.getElementById('player-arena-slot');
+            playerSlot.className = "w-24 h-36 sm:w-40 sm:h-56 rounded-xl relative animate-slam";
+            playerSlot.innerHTML = createCardHTML(playerCard, false);
+
+            const aiIdx = chooseAICardIndex(playerCard);
+            const aiCard = state.aiHand.splice(aiIdx, 1)[0];
+            renderAIHandBacks();
+
+            const aiSlot = document.getElementById('ai-arena-slot');
+            aiSlot.className = "w-24 h-36 sm:w-40 sm:h-56 rounded-xl perspective-1000 relative animate-slam";
+            aiSlot.innerHTML = `
+                <div id="ai-flip-card" class="card-inner card-flipped">
+                    <div id="ai-revealed-face" class="card-face">
+                        ${createCardHTML(aiCard, false)}
+                    </div>
+                    <div class="card-face card-back flex flex-col items-center justify-center p-2 text-center">
+                        <span class="text-xl sm:text-3xl mb-1 animate-pulse">🔮</span>
+                        <span class="font-epic text-[9px] sm:text-xs text-indigo-300 font-bold">RIVAL</span>
+                    </div>
+                </div>
+            `;
+
+            const statusEl = document.getElementById('turn-status');
+            statusEl.textContent = "Revelando carta rival...";
+            statusEl.className = "text-center px-2.5 py-0.5 rounded-full text-[11px] sm:text-sm font-bold bg-purple-950/90 border border-purple-400/50 text-purple-200";
+
+            setTimeout(() => {
+                sfx.playCardFlip();
+                document.getElementById('ai-flip-card')?.classList.remove('card-flipped');
+            }, 550);
+
+            setTimeout(() => {
+                resolveRound(playerCard, aiCard);
+            }, 1200);
+        }
+
+        function chooseAICardIndex(playerCard) {
+            if (state.aiHand.length <= 1) return 0;
+            const arena = getCurrentArena();
+            if (Math.random() < arena.aiSmartChance) {
+                let best = -1;
+                let bestScore = -1;
+                state.aiHand.forEach((c, idx) => {
+                    const bonus = hasElementAdvantage(c.element, playerCard.element) ? ELEMENT_BONUS : 0;
+                    const total = c.power + bonus;
+                    if (total > playerCard.power && (best === -1 || total < bestScore)) {
+                        bestScore = total;
+                        best = idx;
+                    }
+                });
+                if (best !== -1) return best;
+            }
+            return Math.floor(Math.random() * state.aiHand.length);
+        }
+
+        function resolveRound(playerCard, aiCard) {
+            const playerBonus = hasElementAdvantage(playerCard.element, aiCard.element);
+            const aiBonus = hasElementAdvantage(aiCard.element, playerCard.element);
+
+            const playerFinal = playerCard.power + (playerBonus ? ELEMENT_BONUS : 0);
+            const aiFinal = aiCard.power + (aiBonus ? ELEMENT_BONUS : 0);
+
+            const playerSlot = document.getElementById('player-arena-slot');
+            const aiSlot = document.getElementById('ai-arena-slot');
+            const statusEl = document.getElementById('turn-status');
+            const bonusBadge = document.getElementById('element-bonus-badge');
+            const lastBar = document.getElementById('last-round-bar');
+            const arenaEl = document.getElementById('battle-arena');
+
+            if (playerBonus) {
+                playerSlot.innerHTML = createCardHTML(playerCard, false, -1, playerFinal, true);
+            }
+            if (aiBonus) {
+                const face = document.getElementById('ai-revealed-face');
+                if (face) face.innerHTML = createCardHTML(aiCard, false, -1, aiFinal, true);
+            }
+
+            if (playerBonus && !aiBonus) {
+                bonusBadge.textContent = `${ELEMENT_META[playerCard.element].icon} +${ELEMENT_BONUS}⚡`;
+                bonusBadge.className = "mt-1 text-[9px] sm:text-xs font-extrabold px-1.5 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-500/50 opacity-100";
+            } else if (aiBonus && !playerBonus) {
+                bonusBadge.textContent = `${ELEMENT_META[aiCard.element].icon} +${ELEMENT_BONUS}⚡`;
+                bonusBadge.className = "mt-1 text-[9px] sm:text-xs font-extrabold px-1.5 py-0.5 rounded-md bg-rose-950 text-rose-300 border border-rose-500/50 opacity-100";
+            } else if (playerBonus && aiBonus) {
+                bonusBadge.textContent = `Ambos +${ELEMENT_BONUS}⚡`;
+                bonusBadge.className = "mt-1 text-[9px] sm:text-xs font-extrabold px-1.5 py-0.5 rounded-md bg-amber-950 text-amber-300 border border-amber-500/50 opacity-100";
+            } else {
+                bonusBadge.className = "mt-1 text-[9px] sm:text-xs font-extrabold px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-400 opacity-100";
+                bonusBadge.textContent = "Sin bono";
+            }
+
+            if (playerFinal > aiFinal) {
+                state.wins++;
+                state.winStreak++;
+                state.aiLives = Math.max(0, state.aiLives - 1);
+
+                const arenaBonusCoins = (getCurrentArena().id - 1) * 5;
+                const roundCoins = 15 + arenaBonusCoins + (state.winStreak > 1 ? 5 : 0);
+                addCoins(roundCoins, false);
+
+                sfx.playWinRound();
+                playerSlot.firstElementChild?.classList.add('winner-glow');
+                aiSlot.querySelector('.card-inner')?.classList.add('loser-dim');
+                statusEl.textContent = `¡Ganaste +${roundCoins}💰! (${playerFinal}⚡ vs ${aiFinal}⚡)`;
+                statusEl.className = "text-center px-2.5 py-0.5 rounded-full text-[11px] sm:text-sm font-bold bg-emerald-950/90 border border-emerald-400 text-emerald-300";
+                lastBar.innerHTML = `<span class="text-emerald-400 font-bold">+${roundCoins}💰</span> ${playerCard.name} (${playerFinal}⚡) venció a ${aiCard.name} (${aiFinal}⚡)`;
+            } else if (aiFinal > playerFinal) {
+                state.losses++;
+                state.winStreak = 0;
+                state.playerLives = Math.max(0, state.playerLives - 1);
+                sfx.playLoseRound();
+                aiSlot.querySelector('#ai-revealed-face')?.firstElementChild?.classList.add('winner-glow');
+                playerSlot.firstElementChild?.classList.add('loser-dim');
+                arenaEl.classList.add('animate-shake');
+                setTimeout(() => arenaEl.classList.remove('animate-shake'), 380);
+                statusEl.textContent = `Rival gana (${aiFinal}⚡ vs ${playerFinal}⚡)`;
+                statusEl.className = "text-center px-2.5 py-0.5 rounded-full text-[11px] sm:text-sm font-bold bg-rose-950/90 border border-rose-400 text-rose-300";
+                lastBar.innerHTML = `<span class="text-rose-400 font-bold">Ronda ${state.round}:</span> ${aiCard.name} (${aiFinal}⚡) superó a ${playerCard.name} (${playerFinal}⚡)`;
+            } else {
+                sfx.playDrawRound();
+                statusEl.textContent = `¡Empate! (${playerFinal}⚡ vs ${aiFinal}⚡)`;
+                statusEl.className = "text-center px-2.5 py-0.5 rounded-full text-[11px] sm:text-sm font-bold bg-amber-950/90 border border-amber-400 text-amber-300";
+                lastBar.innerHTML = `<span class="text-amber-300 font-bold">Ronda ${state.round}:</span> Empate exacto a ${playerFinal}⚡`;
+            }
+
+            updateHeaderUI();
+
+            if (state.playerLives <= 0 || state.aiLives <= 0) {
+                setTimeout(() => showGameOver(state.aiLives <= 0), 1200);
+                return;
+            }
+
+            setTimeout(() => prepareNextRound(), 1650);
+        }
+
+        function prepareNextRound() {
+            state.round++;
+            drawCards(state.playerDeck, state.playerHand, 1, true);
+            drawCards(state.aiDeck, state.aiHand, 1, false);
+
+            const playerSlot = document.getElementById('player-arena-slot');
+            playerSlot.className = "w-24 h-36 sm:w-40 sm:h-56 rounded-xl border-2 border-dashed border-cyan-500/40 bg-slate-950/50 flex items-center justify-center relative";
+            playerSlot.innerHTML = `<span class="text-slate-500 text-[10px] sm:text-xs text-center px-1.5">Toca tu carta</span>`;
+
+            const aiSlot = document.getElementById('ai-arena-slot');
+            aiSlot.className = "w-24 h-36 sm:w-40 sm:h-56 rounded-xl border-2 border-dashed border-rose-500/40 bg-slate-950/50 flex items-center justify-center perspective-1000 relative";
+            aiSlot.innerHTML = `<span class="text-slate-500 text-[10px] sm:text-xs text-center px-1.5">Esperando...</span>`;
+
+            const statusEl = document.getElementById('turn-status');
+            statusEl.textContent = "Elige una carta abajo para atacar";
+            statusEl.className = "text-center px-2.5 py-0.5 rounded-full text-[11px] sm:text-sm font-bold bg-indigo-950/90 border border-indigo-500/40 text-indigo-200";
+
+            document.getElementById('element-bonus-badge').classList.add('opacity-0');
+
+            state.isBusy = false;
+            updateHeaderUI();
+            renderAIHandBacks();
+            renderPlayerHand();
+        }
+
+        /**
+         * FIN DE PARTIDA: CÁLCULO DE TROFEOS, SUBIDA/BAJADA DE ARENA Y MONEDAS
+         */
+        function showGameOver(playerWon) {
+            sfx.playGameOver(playerWon);
+            const prevArena = getCurrentArena();
+
+            let trophyDelta = 0;
+            if (playerWon) {
+                // +28 a +35 trofeos según vidas restantes
+                trophyDelta = 28 + Math.min(7, state.playerLives * 2);
+            } else {
+                // En Arena 1 pierde pocos trofeos (-8 a -12) para no atascarse; en otras arenas (-18 a -22)
+                if (prevArena.id === 1) {
+                    trophyDelta = -(8 + Math.floor(Math.random() * 5));
+                } else {
+                    trophyDelta = -(18 + Math.floor(Math.random() * 5));
+                }
+            }
+
+            const oldTrophies = playerProfile.trophies;
+            playerProfile.trophies = Math.max(0, playerProfile.trophies + trophyDelta);
+            const actualTrophyChange = playerProfile.trophies - oldTrophies;
+            const newArena = getCurrentArena();
+
+            const matchReward = playerWon ? newArena.winCoins : Math.round(newArena.winCoins * 0.25);
+            addCoins(matchReward, false);
+            saveProfile();
+            updateTopEconomyUI(0);
+            updateChestButtons();
+
+            const modal = document.getElementById('game-over-modal');
+            const card = document.getElementById('game-over-card');
+            document.getElementById('stat-rounds').textContent = state.round;
+            document.getElementById('stat-wins').textContent = state.wins;
+            document.getElementById('stat-losses').textContent = state.losses;
+
+            // Trofeos y monedas ganados/perdidos
+            const trophyBadge = document.getElementById('end-trophies-earned');
+            if (actualTrophyChange >= 0) {
+                trophyBadge.textContent = `+${actualTrophyChange} 🏆`;
+                trophyBadge.className = "bg-amber-950/90 border border-amber-400/60 text-amber-300 font-black text-xs sm:text-sm px-3 py-1 rounded-full";
+            } else {
+                trophyBadge.textContent = `${actualTrophyChange} 🏆`;
+                trophyBadge.className = "bg-rose-950/90 border border-rose-400/60 text-rose-300 font-black text-xs sm:text-sm px-3 py-1 rounded-full";
+            }
+            document.getElementById('end-coins-earned').textContent = `+${matchReward} 💰`;
+
+            // Banner de ascenso o descenso de Arena
+            const arenaBanner = document.getElementById('arena-change-banner');
+            if (newArena.id > prevArena.id) {
+                arenaBanner.classList.remove('hidden');
+                arenaBanner.className = "mb-3 py-2 px-3 rounded-2xl font-extrabold text-xs sm:text-sm bg-gradient-to-r from-amber-500/30 via-emerald-500/30 to-amber-500/30 border border-amber-400 text-amber-200 animate-bounce";
+                arenaBanner.innerHTML = `🎉 ¡ASCENDISTE A ARENA ${newArena.id}: ${newArena.icon} ${newArena.name.toUpperCase()}!<br><span class="text-[11px] text-emerald-300 font-semibold">Nuevas cartas desbloqueadas en la Tienda</span>`;
+            } else if (newArena.id < prevArena.id) {
+                arenaBanner.classList.remove('hidden');
+                arenaBanner.className = "mb-3 py-2 px-3 rounded-2xl font-extrabold text-xs sm:text-sm bg-rose-950/90 border border-rose-500/60 text-rose-200";
+                arenaBanner.textContent = `⬇️ Descendiste a Arena ${newArena.id}: ${newArena.icon} ${newArena.name}`;
+            } else {
+                arenaBanner.classList.add('hidden');
+            }
+
+            // Barra de progreso de trofeos en fin de partida
+            const nextArena = ARENAS.find(a => a.id === newArena.id + 1);
+            document.getElementById('end-arena-label').textContent = `${newArena.icon} Arena ${newArena.id}: ${newArena.name}`;
+            if (nextArena) {
+                const span = nextArena.minTrophies - newArena.minTrophies;
+                const prog = playerProfile.trophies - newArena.minTrophies;
+                const pct = Math.min(100, Math.max(0, Math.round((prog / span) * 100)));
+                document.getElementById('end-trophy-progress-text').textContent = `${playerProfile.trophies} / ${nextArena.minTrophies} 🏆`;
+                document.getElementById('end-trophy-bar').style.width = `${pct}%`;
+            } else {
+                document.getElementById('end-trophy-progress-text').textContent = `${playerProfile.trophies} 🏆 (Máxima)`;
+                document.getElementById('end-trophy-bar').style.width = `100%`;
+            }
+
+            if (playerWon) {
+                card.className = "bg-slate-900 border-2 border-amber-400 rounded-3xl max-w-sm w-full p-5 text-center shadow-2xl";
+                document.getElementById('end-emoji').textContent = "🏆";
+                document.getElementById('end-title').textContent = "¡VICTORIA!";
+                document.getElementById('end-title').className = "font-epic text-2xl font-black tracking-wide mb-1 text-amber-400";
+                document.getElementById('end-subtitle').textContent = "Sumaste trofeos y oro para mejorar tu mazo.";
+            } else {
+                card.className = "bg-slate-900 border-2 border-rose-500 rounded-3xl max-w-sm w-full p-5 text-center shadow-2xl";
+                document.getElementById('end-emoji').textContent = "💀";
+                document.getElementById('end-title').textContent = "DERROTA";
+                document.getElementById('end-title').className = "font-epic text-2xl font-black tracking-wide mb-1 text-rose-400";
+                document.getElementById('end-subtitle').textContent = "Mejora tus cartas en Mazo o abre sobres para volver más fuerte.";
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        /**
+         * MODAL DE ARENAS: MUESTRA LAS 5 ARENAS Y LAS CARTAS DE CADA UNA
+         */
+        function openArenasModal() {
+            const currentArena = getCurrentArena();
+            const container = document.getElementById('arenas-list-container');
+
+            container.innerHTML = [...ARENAS].reverse().map(arena => {
+                const isCurrent = arena.id === currentArena.id;
+                const isUnlocked = playerProfile.trophies >= arena.minTrophies;
+                const arenaCards = CARD_CATALOG.filter(c => c.arena === arena.id);
+
+                const borderStyle = isCurrent
+                    ? "border-2 border-amber-400 bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 shadow-lg shadow-amber-950/30"
+                    : isUnlocked
+                        ? "border border-emerald-500/40 bg-slate-950/90"
+                        : "border border-slate-800 bg-slate-950/50 opacity-75";
+
+                return `
+                    <div class="rounded-2xl p-3 ${borderStyle}">
+                        <div class="flex items-center justify-between mb-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-2xl">${arena.icon}</span>
+                                <div>
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="font-epic font-bold text-sm sm:text-base ${arena.badgeClass}">Arena ${arena.id}: ${arena.name}</span>
+                                        ${isCurrent ? `<span class="text-[9px] font-black uppercase bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full">Actual</span>` : ''}
+                                    </div>
+                                    <div class="text-[11px] text-slate-400">
+                                        Requisito: <strong class="text-amber-300">${arena.minTrophies}+ 🏆</strong> • Victoria: <strong class="text-emerald-300">+${arena.winCoins} 💰</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <span class="text-xs font-extrabold ${isUnlocked ? 'text-emerald-400' : 'text-slate-500'}">
+                                ${isUnlocked ? '✅ Desbloqueada' : '🔒 Bloqueada'}
+                            </span>
+                        </div>
+
+                        <!-- Cartas que se desbloquean en esta Arena -->
+                        <div class="grid grid-cols-4 sm:grid-cols-6 gap-1.5 pt-1 border-t border-slate-800/80">
+                            ${arenaCards.map(c => {
+                                const owned = playerProfile.cards[c.id]?.unlocked;
+                                const eMeta = ELEMENT_META[c.element];
+                                return `
+                                    <div class="rounded-lg p-1.5 text-center border ${owned ? 'bg-slate-900 border-indigo-500/40' : 'bg-slate-950 border-slate-800'}">
+                                        <div class="text-lg leading-none">${c.icon}</div>
+                                        <div class="text-[9px] font-bold text-white truncate mt-1">${c.name}</div>
+                                        <div class="text-[8px] font-extrabold ${eMeta.color}">${eMeta.icon} ⚡${c.power}</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const m = document.getElementById('arenas-modal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        /**
+         * TIENDA DE SOBRES (FILTRADA POR ARENA) Y MEJORA DE CARTAS POR NIVELES
+         */
+        let currentPackPulls = [];
+
+        function grantCardToPlayer(card) {
+            let entry = playerProfile.cards[card.id];
+            if (!entry || !entry.unlocked) {
+                playerProfile.cards[card.id] = { unlocked: true, level: 1, copies: 0 };
+                return { card, status: "NEW", refund: 0 };
+            } else if (entry.level < MAX_CARD_LEVEL) {
+                entry.copies += 1;
+                return { card, status: "COPY", refund: 0 };
+            } else {
+                const refund = MAX_LEVEL_REFUND[card.rarity] || 30;
+                playerProfile.coins += refund;
+                return { card, status: "MAX_REFUND", refund };
+            }
+        }
+
+        function openShopModal(tab = 'shop') {
+            const arena = getCurrentArena();
+            const availableCardsCount = CARD_CATALOG.filter(c => c.arena <= arena.id).length;
+
+            document.getElementById('shop-arena-banner').innerHTML = `
+                <span class="font-bold text-indigo-200">${arena.icon} Sobres de Arena ${arena.id}: ${arena.name}</span>
+                <span class="text-amber-300 font-extrabold">${availableCardsCount}/${CARD_CATALOG.length} cartas en pool</span>
+            `;
+            document.getElementById('chest-reward-desc').innerHTML = `Recibe <strong>+${arena.chestCoins} 💰</strong> y <strong>1 carta aleatoria</strong> de Arena 1-${arena.id} cada 30s.`;
+
+            updateTopEconomyUI(0);
+            updateChestButtons();
+            document.getElementById('shop-feedback').classList.add('hidden');
+            switchShopTab(tab);
+
+            const m = document.getElementById('shop-modal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        function switchShopTab(tab) {
+            const shopTab = document.getElementById('shop-tab-content');
+            const colTab = document.getElementById('collection-tab-content');
+            const shopBtn = document.getElementById('tab-shop-btn');
+            const colBtn = document.getElementById('tab-collection-btn');
+
+            if (tab === 'shop') {
+                shopTab.classList.remove('hidden');
+                colTab.classList.add('hidden');
+                shopBtn.className = "px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-amber-500 text-slate-950 transition";
+                colBtn.className = "px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-slate-800 text-slate-300 hover:bg-slate-700 transition";
+            } else {
+                shopTab.classList.add('hidden');
+                colTab.classList.remove('hidden');
+                colBtn.className = "px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-indigo-500 text-white transition";
+                shopBtn.className = "px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-slate-800 text-slate-300 hover:bg-slate-700 transition";
+                renderCollectionGrid();
+            }
+        }
+
+        function rollCardByRarityInArena(weights, maxArenaId) {
+            const arenaPool = CARD_CATALOG.filter(c => c.arena <= maxArenaId);
+            const entries = Object.entries(weights);
+            const total = entries.reduce((sum, [, w]) => sum + w, 0);
+            let r = Math.random() * total;
+            let chosenRarity = "Común";
+
+            for (const [rarity, weight] of entries) {
+                if (r < weight) {
+                    chosenRarity = rarity;
+                    break;
+                }
+                r -= weight;
+            }
+
+            let rarityPool = arenaPool.filter(c => c.rarity === chosenRarity);
+            if (rarityPool.length === 0) rarityPool = arenaPool;
+
+            // Dar un ligero peso extra a cartas de la arena más alta desbloqueada
+            const topArenaPool = rarityPool.filter(c => c.arena === maxArenaId);
+            if (topArenaPool.length > 0 && Math.random() < 0.55) {
+                return topArenaPool[Math.floor(Math.random() * topArenaPool.length)];
+            }
+            return rarityPool[Math.floor(Math.random() * rarityPool.length)];
+        }
+
+        function buyPack(packKey) {
+            const pack = PACK_CONFIG[packKey];
+            const feedback = document.getElementById('shop-feedback');
+            if (!pack) return;
+
+            if (playerProfile.coins < pack.cost) {
+                feedback.textContent = `Necesitas ${pack.cost} 💰 (te faltan ${pack.cost - playerProfile.coins} 💰). ¡Gana partidas o abre el cofre gratis!`;
+                feedback.classList.remove('hidden');
+                sfx.playLoseRound();
+                return;
+            }
+
+            feedback.classList.add('hidden');
+            addCoins(-pack.cost, false);
+            sfx.playCardPlay();
+
+            const arena = getCurrentArena();
+            const pulledCards = [];
+
+            for (let i = 0; i < pack.count; i++) {
+                let weights = { ...pack.weights };
+                if (i === pack.count - 1 && pack.guaranteedMinRarity === "Rara") {
+                    weights["Común"] = 0;
+                } else if (i === pack.count - 1 && pack.guaranteedMinRarity === "Épica") {
+                    weights["Común"] = 0;
+                    weights["Rara"] = 0;
+                }
+                pulledCards.push(rollCardByRarityInArena(weights, arena.id));
+            }
+
+            currentPackPulls = pulledCards.map(card => ({
+                ...grantCardToPlayer(card),
+                revealed: false
+            }));
+
+            saveProfile();
+            updateTopEconomyUI(0);
+            state.playerDeck = buildPlayerDeckFromCollection();
+
+            openPackOpeningModal(
+                `✨ ${pack.name} (Arena ${arena.id})`,
+                "Toca cada carta para revelarla y sumar copias"
+            );
+        }
+
+        function openPackOpeningModal(title, subtitle) {
+            document.getElementById('pack-opening-title').textContent = title;
+            document.getElementById('pack-opening-subtitle').textContent = subtitle;
+            const container = document.getElementById('pack-cards-container');
+
+            container.innerHTML = currentPackPulls.map((item, idx) => {
+                const rStyle = RARITY_STYLES[item.card.rarity];
+                const info = playerProfile.cards[item.card.id] || { level: 1, copies: 0 };
+                const req = UPGRADE_COSTS[info.level];
+                const effectiveCard = { ...item.card, level: info.level, power: getCardPowerAtLevel(item.card.power, info.level) };
+
+                let badgeHTML = "";
+                if (item.status === "NEW") {
+                    badgeHTML = `<span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-emerald-500 text-slate-950 font-black text-[10px]">¡DESBLOQUEADA!</span>`;
+                } else if (item.status === "COPY") {
+                    const ready = req && info.copies >= req.copies;
+                    badgeHTML = `<span class="inline-block mt-1 px-2 py-0.5 rounded-full ${ready ? 'bg-emerald-400 text-slate-950 animate-pulse' : 'bg-cyan-400 text-slate-950'} font-black text-[10px]">+1 Copia (${info.copies}/${req ? req.copies : 'MAX'})</span>`;
+                } else {
+                    badgeHTML = `<span class="inline-block mt-1 px-2 py-0.5 rounded-full bg-amber-400 text-slate-950 font-black text-[10px]">Nv.MAX +${item.refund}💰</span>`;
+                }
+
+                return `
+                    <div class="flex flex-col items-center">
+                        <div onclick="revealPackCard(${idx})" class="w-24 h-36 sm:w-32 sm:h-44 perspective-1000 cursor-pointer">
+                            <div id="pack-card-inner-${idx}" class="card-inner card-flipped">
+                                <div class="card-face">
+                                    ${createCardHTML(effectiveCard, false)}
+                                </div>
+                                <div class="card-face card-back ${rStyle.cardClass} flex flex-col items-center justify-center p-2 text-center">
+                                    <span class="text-2xl sm:text-3xl mb-1 animate-bounce">🎴</span>
+                                    <span class="text-[9px] sm:text-xs font-extrabold uppercase tracking-wider text-amber-200">${item.card.rarity}</span>
+                                    <span class="text-[8px] text-slate-300 mt-0.5">Arena ${item.card.arena}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="pack-card-tag-${idx}" class="opacity-0 transition-opacity duration-300">
+                            ${badgeHTML}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            const m = document.getElementById('pack-opening-modal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        function revealPackCard(idx) {
+            const item = currentPackPulls[idx];
+            if (!item || item.revealed) return;
+            item.revealed = true;
+
+            const inner = document.getElementById(`pack-card-inner-${idx}`);
+            const tag = document.getElementById(`pack-card-tag-${idx}`);
+            inner?.classList.remove('card-flipped');
+            tag?.classList.remove('opacity-0');
+
+            sfx.playPackOpen(item.card.rarity === "Legendaria" || item.card.rarity === "Épica");
+        }
+
+        function revealAllPackCards() {
+            currentPackPulls.forEach((_, idx) => revealPackCard(idx));
+        }
+
+        function closePackOpening() {
+            revealAllPackCards();
+            closeModal('pack-opening-modal');
+            renderCollectionGrid();
+            updateTopEconomyUI(0);
+        }
+
+        /**
+         * SUBIR DE NIVEL UNA CARTA EN MI MAZO / COLECCIÓN
+         */
+        function upgradeCard(cardId) {
+            const card = CARD_CATALOG.find(c => c.id === cardId);
+            const info = playerProfile.cards[cardId];
+            if (!card || !info || !info.unlocked || info.level >= MAX_CARD_LEVEL) return;
+
+            const req = UPGRADE_COSTS[info.level];
+            if (info.copies < req.copies || playerProfile.coins < req.coins) return;
+
+            info.copies -= req.copies;
+            info.level += 1;
+            playerProfile.coins -= req.coins;
+
+            saveProfile();
+            sfx.playLevelUp();
+            updateTopEconomyUI(-req.coins);
+            renderCollectionGrid();
+
+            // Actualizar mazo activo y cartas en mano si esa carta está en la mano actual
+            state.playerDeck = buildPlayerDeckFromCollection();
+            const newPower = getCardPowerAtLevel(card.power, info.level);
+            state.playerHand.forEach(h => {
+                if (h.id === cardId) {
+                    h.level = info.level;
+                    h.power = newPower;
+                }
+            });
+            renderPlayerHand();
+
+            // Animación visual en la tarjeta recién mejorada
+            setTimeout(() => {
+                const el = document.getElementById(`collection-card-${cardId}`);
+                if (el) el.classList.add('animate-levelup');
+            }, 30);
+        }
+
+        function renderCollectionGrid() {
+            const grid = document.getElementById('collection-grid');
+            if (!grid) return;
+
+            grid.innerHTML = CARD_CATALOG.map(card => {
+                const info = playerProfile.cards[card.id];
+                const unlocked = info && info.unlocked;
+                const rStyle = RARITY_STYLES[card.rarity];
+                const eMeta = ELEMENT_META[card.element];
+                const arenaObj = ARENAS.find(a => a.id === card.arena);
+
+                if (!unlocked) {
+                    return `
+                        <div class="rounded-2xl p-2.5 bg-slate-950/70 border border-slate-800 flex flex-col items-center justify-between h-44 opacity-65">
+                            <div class="w-full flex justify-between text-[10px] text-slate-500">
+                                <span>${eMeta.icon}</span>
+                                <span>${arenaObj.icon} Arena ${card.arena}</span>
+                            </div>
+                            <div class="w-11 h-11 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-xl font-black text-slate-600">
+                                ?
+                            </div>
+                            <div class="text-center w-full">
+                                <div class="text-xs font-bold text-slate-400 truncate">${card.name}</div>
+                                <div class="text-[10px] text-slate-500">Desbloquea en Arena ${card.arena}</div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                const level = info.level;
+                const isMax = level >= MAX_CARD_LEVEL;
+                const currentPower = getCardPowerAtLevel(card.power, level);
+                const nextPower = currentPower + POWER_GAIN_PER_LEVEL;
+                const req = isMax ? null : UPGRADE_COSTS[level];
+                const hasEnoughCopies = !isMax && info.copies >= req.copies;
+                const canAfford = !isMax && hasEnoughCopies && playerProfile.coins >= req.coins;
+                const progressPct = isMax ? 100 : Math.min(100, Math.round((info.copies / req.copies) * 100));
+
+                return `
+                    <div id="collection-card-${card.id}" class="rounded-2xl p-2.5 ${rStyle.cardClass} flex flex-col justify-between relative overflow-hidden">
+                        <!-- Top: Elemento + Nivel + Poder -->
+                        <div class="flex items-center justify-between z-10">
+                            <span class="text-[10px] px-1.5 py-0.2 rounded border ${eMeta.bg} ${eMeta.color} font-bold">${eMeta.icon} Nv.${level}</span>
+                            <span class="text-xs font-black bg-slate-950/90 text-amber-300 px-1.5 py-0.2 rounded border border-amber-400/40">⚡${currentPower}</span>
+                        </div>
+
+                        <!-- Centro: Icono y Nombre -->
+                        <div class="my-1.5 flex flex-col items-center text-center z-10">
+                            <div class="text-3xl leading-none mb-1">${card.icon}</div>
+                            <div class="text-xs font-extrabold text-white truncate w-full">${card.name}</div>
+                            <div class="text-[9px] text-slate-400">${arenaObj.icon} Arena ${card.arena} • ${card.rarity}</div>
+                        </div>
+
+                        <!-- Progreso de Copias y Botón de Mejora -->
+                        <div class="z-10 bg-slate-950/90 rounded-xl p-1.5 border border-white/10">
+                            ${isMax ? `
+                                <div class="text-center text-[10px] font-black text-amber-300 py-1">
+                                    ⭐ NIVEL MÁXIMO (10)
+                                </div>
+                            ` : `
+                                <div class="flex items-center justify-between text-[9px] font-bold mb-1">
+                                    <span class="${hasEnoughCopies ? 'text-emerald-400' : 'text-slate-300'}">Copias: ${info.copies}/${req.copies}</span>
+                                    <span class="text-emerald-300">⚡${currentPower}➔${nextPower}</span>
+                                </div>
+                                <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1.5">
+                                    <div class="h-full ${hasEnoughCopies ? 'bg-emerald-400' : 'bg-cyan-400'} transition-all" style="width: ${progressPct}%"></div>
+                                </div>
+                                <button onclick="upgradeCard('${card.id}')" ${canAfford ? '' : 'disabled'}
+                                    class="w-full py-1 rounded-lg text-[10px] font-black transition ${
+                                        canAfford
+                                            ? 'bg-gradient-to-r from-emerald-400 to-green-500 text-slate-950 shadow active:scale-95 cursor-pointer'
+                                            : hasEnoughCopies
+                                                ? 'bg-amber-950/80 border border-amber-500/40 text-amber-300 cursor-not-allowed'
+                                                : 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                                    }">
+                                    ${canAfford ? `⬆️ Mejorar (${req.coins}💰)` : hasEnoughCopies ? `Falta Oro (${req.coins}💰)` : `Faltan Copias (${req.coins}💰)`}
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function openElementDetailModal() {
+            const m = document.getElementById('element-modal');
+            m.classList.remove('hidden');
+            m.classList.add('flex');
+        }
+
+        function closeModal(id) {
+            const m = document.getElementById(id);
+            m.classList.add('hidden');
+            m.classList.remove('flex');
+        }
+
+        function initGame() {
+            state = {
+                playerLives: MAX_LIVES,
+                aiLives: MAX_LIVES,
+                round: 1,
+                wins: 0,
+                losses: 0,
+                winStreak: 0,
+                playerDeck: buildPlayerDeckFromCollection(),
+                aiDeck: buildAIDeck(),
+                playerHand: [],
+                aiHand: [],
+                isBusy: false
+            };
+
+            drawCards(state.playerDeck, state.playerHand, HAND_SIZE, true);
+            drawCards(state.aiDeck, state.aiHand, HAND_SIZE, false);
+
+            const playerSlot = document.getElementById('player-arena-slot');
+            playerSlot.className = "w-24 h-36 sm:w-40 sm:h-56 rounded-xl border-2 border-dashed border-cyan-500/40 bg-slate-950/50 flex items-center justify-center relative";
+            playerSlot.innerHTML = `<span class="text-slate-500 text-[10px] sm:text-xs text-center px-1.5">Toca tu carta</span>`;
+
+            const aiSlot = document.getElementById('ai-arena-slot');
+            aiSlot.className = "w-24 h-36 sm:w-40 sm:h-56 rounded-xl border-2 border-dashed border-rose-500/40 bg-slate-950/50 flex items-center justify-center perspective-1000 relative";
+            aiSlot.innerHTML = `<span class="text-slate-500 text-[10px] sm:text-xs text-center px-1.5">Esperando...</span>`;
+
+            document.getElementById('turn-status').textContent = "Elige una carta abajo para atacar";
+            document.getElementById('turn-status').className = "text-center px-2.5 py-0.5 rounded-full text-[11px] sm:text-sm font-bold bg-indigo-950/90 border border-indigo-500/40 text-indigo-200";
+            document.getElementById('element-bonus-badge').classList.add('opacity-0');
+            document.getElementById('last-round-bar').innerHTML = `Gana partidas para subir de <span class="text-amber-300 font-bold">🏆 Arena</span> y mejorar cartas`;
+
+            closeModal('game-over-modal');
+            updateHeaderUI();
+            renderAIHandBacks();
+            renderPlayerHand();
+        }
+
+        window.onload = function () {
+            loadProfile();
+            initGame();
+            updateChestButtons();
+            setInterval(updateChestButtons, 1000);
+
+            document.getElementById('play-again-btn').addEventListener('click', () => {
+                sfx.playCardPlay();
+                initGame();
+            });
+
+            document.getElementById('sound-toggle').addEventListener('click', () => {
+                sfx.enabled = !sfx.enabled;
+                document.getElementById('sound-icon').textContent = sfx.enabled ? '🔊' : '🔇';
+                if (sfx.enabled) sfx.playCardPlay();
+            });
+        };
+    </script>
+</body>
+</html>
